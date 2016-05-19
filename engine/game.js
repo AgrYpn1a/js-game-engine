@@ -1,8 +1,8 @@
 /*! 
  * _____________________
- * |***	***********	***|
- * |***	GAME ENGINE	***|
- * |***	***********	***|
+ * |***	*********** ***|
+ * |***	GAME ENGINE ***|
+ * |***	*********** ***|
  * ---------------------
  *
  * SimpleCanvas GameEngine JavaScript Library v1.0
@@ -24,6 +24,8 @@
  *
  */
 ;
+'use strict';
+
 (function (global) {
 	var Game = function (w, h) {
 		return new Game.init(w, h);
@@ -57,6 +59,35 @@
 
 		// init GUI
 		this.cPad = new ControlPad(this, 0.88, 0.83);
+
+		/*
+			MAIN EVENTS
+		*/
+		this.events.on('update', function () {
+			// always update background
+			canvas.getContext('2d').fillStyle = '#ccc';
+			canvas.getContext('2d').fillRect(0, 0, game.canvas.width, game.canvas.height);
+
+		});
+
+		this.events.on('gui', function () {
+			for (var i = 0; i < this.game.gui.length; i++) {
+				this.game.gui[i].drawImage();
+			}
+		});
+
+		function callGUI() {
+			this.game.events.emit('gui');
+		}
+
+		function callUpdate() {
+
+			this.game.events.emit('update');
+		}
+
+		// now we implement the main game and GUI render loop
+		setInterval(callUpdate, 150);
+		setInterval(callGUI, 10);
 	}
 
 	Game.prototype = {
@@ -71,8 +102,9 @@
 			return b;
 		},
 
-		createEntity: function (name) {
-			return new Entity(this, name);
+		createEntity: function (id, img, x, y, isPlayer) {
+			isPlayer = isPlayer || false;
+			return new Entity(this, id, img, x, y);
 		},
 
 		/*
@@ -101,6 +133,50 @@
 	 *----------------------------------------------------------------------------
 	 */
 
+	/*
+		GAME OBJECTS -------------------------------------------------------------
+	*/
+	var Entity = function (game, id, img, x, y, isPlayer) {
+		this.id = id;
+		this.image = image;
+		this.game = game;
+		this.ctx = game.canvas.getContext('2d');
+		this.isPlayer = isPlayer;
+		this.position = {
+			x: x,
+			y: y
+		};
+
+		return this;
+	};
+
+	Entity.prototype = {
+		game: {},
+
+		moveTo: function (x, y) {
+			if (this.isPlayer) {
+				this.position.x = x;
+				this.position.y = y;
+				this.drawImage();
+			}
+		},
+
+		initDrawImage: function () {
+			var g = this;
+			this.image.onload = function () {
+				g.ctx.drawImage(g.image, g.position.x, g.position.y, g.image.width, g.image.height);
+			}
+		},
+
+		drawImage: function () {
+			this.ctx.drawImage(this.image, this.position.x, this.position.y, this.image.width, this.image.height);
+		}
+	};
+
+	/*
+		USER INTERFACE -----------------------------------------------------------
+	*/
+
 	var ControlPad = function (game, x, y) {
 		var w = game.canvas.width;
 		var h = game.canvas.height;
@@ -123,8 +199,6 @@
 		game.gui.push(this.btnLeft);
 
 
-		ctx.fillStyle = '#ccc';
-		ctx.fillRect(0, 0, 800, 600);
 
 		// handle click events
 		game.canvas.addEventListener('mousedown', function (event) {
@@ -149,37 +223,12 @@
 		return this;
 	};
 
-	/*
-		USER INTERFACE
-	*/
-	var Button = function (game, id, img, x, y) {
-		if (!id) {
-			throw new Error(game.err.missing_param);
-			return null;
-		}
+	var GuiElement = function () {};
 
-		this.id = id;
-		// image
-		this.image = new Image();
-		this.image.src = img;
-
-		this.rotation = 0;
-		this.game = game;
-		this.ctx = game.canvas.getContext('2d');
-
-		this.position = {
-			x: x - this.image.width / 2,
-			y: y - this.image.height / 2
-		};
-
-		this.initDrawImage();
-
-	};
-
-	Button.prototype = {
+	GuiElement.prototype = {
 		setPosition: function (x, y) {
 			if (!x || !y)
-				throw new Error(err.missing_param);
+				throw new Error(this.game.err.missing_param);
 
 			this.position.x = x;
 			this.position.y = y;
@@ -195,80 +244,70 @@
 
 		drawImage: function () {
 			this.ctx.drawImage(this.image, this.position.x, this.position.y, this.image.width, this.image.height);
-		},
-
-		inRange: function (x, y) {
-			var lDist = this.position.x,
-				rDist = this.position.x + this.image.width,
-				tDist = this.position.y,
-				bDist = this.position.y + this.image.height;
-
-			if (x > lDist && x < rDist && y > tDist && y < bDist) {
-				this.onMouseDown();
-			}
-		},
-
-		onMouseDown: function () {
-			this.me();
-		},
-
-		me: function () {
-			console.log('Button ' + this.id + ' reporting a click!');
 		}
+	};
+
+	var Button = function (game, id, img, x, y) {
+		if (!id) {
+			throw new Error(game.err.missing_param);
+			return null;
+		}
+
+		this.id = id;
+
+		this.game = game;
+		this.ctx = game.canvas.getContext('2d');
+
+		this.image = new Image();
+		this.image.src = img;
+
+		this.position = {
+			x: x - this.image.width / 2,
+			y: y - this.image.height / 2
+		};
+
+		this.initDrawImage();
+	};
+
+	Button.prototype = GuiElement.prototype;
+
+	Button.prototype.inRange = function (x, y) {
+		var lDist = this.position.x,
+			rDist = this.position.x + this.image.width,
+			tDist = this.position.y,
+			bDist = this.position.y + this.image.height;
+
+		if (x > lDist && x < rDist && y > tDist && y < bDist) {
+			this.onMouseDown();
+		}
+	};
+
+	Button.prototype.onMouseDown = function () {
+		console.log('GUI element: ' + this.id + ' reporting a click!');
 	};
 
 	/*
-		Game entity is any object in the scene, that can interact
-		with other objects(entities), and/or be controlled by player
-
-		This method will create new game entity
+		EVENT EMMITER
 	*/
-	var Entity = function (g, name) {
-		/*
-			Each entity will exist within a div, with the custom attributes
-		*/
-
-		// handle missing parameter errors
-		// we wnat to make sure user passes a name 
-		// for the entity
-		if (!name)
-			throw new Error(this.err.missing_param);
-
-		var img = new Image();
-		var entity = g.canvas.getContext('2d').drawImage(img, 0, 0, img.width, img.height);
-
-		/*
-			Properties unique for each entity 
-		*/
-		this.position = {
-			x: 0,
-			y: 0
-		}
-
-		this.src = '';
+	var Emitter = function () {
+		this.events = {};
 	};
 
-	Entity.prototype = {
-		/*
-			After we have initialized an empty entity
-			we want to be able to manipulate it
-			
-			Following methods will allow this to happen
-		*/
-		addSprite: function () {
-			console.log('Added sprite!');
-		},
+	Emitter.prototype.on = function (type, listener) {
+		this.events[type] = this.events[type] || [];
+		this.events[type].push(listener);
+	};
 
-		/*
-			This method will return object, containing x and y coordinates
-		*/
-		getPos: function () {
-			return {
-				x: this.top,
-				y: this.left
-			}
+	Emitter.prototype.emit = function (type) {
+		if (this.events[type]) {
+			this.events[type].forEach(function (listener) {
+				listener();
+			});
 		}
 	};
+	/*
+		FINAL SETUP
+	*/
 
 	Game.init.prototype = Game.prototype;
 
