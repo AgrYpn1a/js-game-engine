@@ -53,6 +53,7 @@
 			MAIN PROPERTIES
 		*/
 		this.gui = [];
+		this.entities = [];
 
 		// init event emmiter
 		this.events = new Emitter();
@@ -68,6 +69,10 @@
 			canvas.getContext('2d').fillStyle = '#ccc';
 			canvas.getContext('2d').fillRect(0, 0, game.canvas.width, game.canvas.height);
 
+			// let's draw entities on top of background
+			for (var i = 0; i < this.game.entities.length; i++) {
+				this.game.entities[i].drawImage();
+			}
 		});
 
 		this.events.on('gui', function () {
@@ -76,22 +81,18 @@
 			}
 		});
 
-		function callGUI() {
-			this.game.events.emit('gui');
-		}
-
 		function callUpdate() {
-
 			this.game.events.emit('update');
+
+			// we want to draw gui last, on top of everything
+			this.game.events.emit('gui');
 		}
 
 		// now we implement the main game and GUI render loop
 		setInterval(callUpdate, 150);
-		setInterval(callGUI, 10);
 	}
 
 	Game.prototype = {
-
 		createButton: function (id, img, x, y) {
 			/*
 				This method will add a new GUI element, a Button to the screen
@@ -104,7 +105,9 @@
 
 		createEntity: function (id, img, x, y, isPlayer) {
 			isPlayer = isPlayer || false;
-			return new Entity(this, id, img, x, y);
+			var e = new Entity(this, id, img, x, y, isPlayer);
+			this.entities.push(e);
+			return e;
 		},
 
 		/*
@@ -138,15 +141,20 @@
 	*/
 	var Entity = function (game, id, img, x, y, isPlayer) {
 		this.id = id;
-		this.image = image;
+		this.image = new Image();
+		this.image.src = img;
 		this.game = game;
 		this.ctx = game.canvas.getContext('2d');
 		this.isPlayer = isPlayer;
+		if (isPlayer) {
+			this.game.cPad.player = this;
+		}
 		this.position = {
 			x: x,
 			y: y
 		};
 
+		this.initDrawImage();
 		return this;
 	};
 
@@ -178,6 +186,9 @@
 	*/
 
 	var ControlPad = function (game, x, y) {
+		// the pad should control player
+		this.player = null;
+
 		var w = game.canvas.width;
 		var h = game.canvas.height;
 
@@ -283,6 +294,21 @@
 	};
 
 	Button.prototype.onMouseDown = function () {
+		var player = this.game.cPad.player;
+		var dir = this.id;
+		if (!player)
+			throw new Error('Player not found!');
+
+		if (dir === 'top') {
+			player.moveTo(player.position.x, player.position.y - 10);
+		} else if (dir === 'bot') {
+			player.moveTo(player.position.x, player.position.y + 10);
+		} else if (dir === 'right') {
+			player.moveTo(player.position.x + 10, player.position.y);
+		} else if (dir === 'left') {
+			player.moveTo(player.position.x - 10, player.position.y);
+		}
+
 		console.log('GUI element: ' + this.id + ' reporting a click!');
 	};
 
@@ -308,7 +334,6 @@
 	/*
 		FINAL SETUP
 	*/
-
 	Game.init.prototype = Game.prototype;
 
 	global.Game = Game;
